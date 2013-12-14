@@ -1,0 +1,158 @@
+<html>
+	<head>
+		<script src="../lib/underscore.js"></script>
+		<script src="../src/Cat.js"></script>
+	</head>
+	<body>
+		<script>
+			Cat.define( 'module-one', [], {
+				events:{
+					a:{},
+					b:{}
+				},
+				handlers:{
+					foo: function(){
+						console.log('module.one.foo');
+					}
+				}
+			});
+			Cat.define( 'module-two', [], {
+				events:{
+					c:{},
+					d:{},
+					e:{}
+				},
+				handlers:{
+					fee: function(){
+						console.log('module.two.fee');
+					}
+				},
+				propertyOne:false,
+				propertyTwo:34
+			});			
+			Cat.define( 'module-three', [ 'module-one', 'module-two' ], {
+				events:{
+					a:function( event ){
+						console.log('emitted event "A"');
+					},
+					d:{}
+				},
+				handlers:{
+					foo: function(){ /* overridden */
+						console.log('module.three.foo');
+						this.trigger('a');
+					},
+					foe: function(){
+						console.log('module.three.foe');
+					}					
+				}
+			});
+
+			Cat.define( 'left', [  ], {
+				events:{
+					a:function( event ){
+						console.log('emitted event "A"');
+						event.propagate();
+					},
+					d:{}
+				},
+				handlers:{
+					foo: function(){ 
+						console.log('module.three.foo');
+						this.trigger('a');
+					},
+					d: function(){
+						console.log('left.d');
+					},
+					a: function(){
+						console.log('left.a');
+					}
+				}
+			});
+
+			Cat.define( 'right', [ ], {
+				events:{
+					e:function( event ){
+						console.log('emitted event "E"');
+					},
+					a: function(){
+						console.log('emitted event "A"');
+					}
+				},
+				handlers:{
+					a: function(){ 
+						console.log('right.a');
+					},
+					d: function(){
+						console.log('right.d');
+					}					
+				}
+			});
+
+			sequential = Cat.seq( 'left', 'right' );
+
+			parallel = Cat.dot( 'left', 'right' );
+
+			traced = Cat.trace( 'left', [ 'a' ]);
+
+
+			Cat.define( 'leaflet.map', [], {
+				events:{
+					'ready':{}
+				},
+				handlers:{
+				}
+				initialize: function(){
+					Template.map.rendered = function(){
+						context.trigger('ready');
+					};
+				}
+			});
+
+			Cat.define( 'leaflet.plugin', [], {
+				events:{
+				},
+				handlers:{
+					ready: function(map){
+
+						var control = L.control( options );
+						control.onAdd = function (map) {
+							var dom = $( L.DomUtil.create('div') );
+							dom.append( render() );
+							return dom;
+						};
+						map.addControl(control);
+
+						console.log('leaflet.plugin.ready');
+					},
+					show: function(){
+						console.log('leaflet.note.show');
+					},
+					hide: function(){
+						console.log('leaflet.note.hide');
+					},
+				},
+				initialize: function(){
+				},
+				render: function(){
+					return  Meteor.render(
+						function () {
+							return Template.editor( );
+						});
+				},
+				template:null
+			});
+
+			Cat.define( 'leaflet.note', [ 'leaflet.plugin' ], {
+				events:{
+				},
+				handlers:{
+
+				},
+				template:'editor'
+			});
+
+
+		</script>
+	</body>
+</html>
