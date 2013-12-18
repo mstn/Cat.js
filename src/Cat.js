@@ -25,7 +25,17 @@
 
   var build = function( inst, context ){
   	var built = {};
-  	_.extend(built, inst.handlers );
+    _.each( _.keys(inst.handlers), function(method){
+      built[ method ] = function(){ return inst.handlers[ method ].apply(built, arguments); };
+    });
+    _.each( _.keys(  _.omit(inst, ['events', 'handlers']) ), function(method){
+      if ( _.isFunction(inst[ method ]) ){
+        built[ method ] = function(){ return inst[ method ].apply(built, arguments); };
+      } else {
+        built[ method ] = inst[ method ];
+      }
+      
+    });
   	built.trigger = function() {
   		var eventName = arguments[0];
   		if ( _.has( inst.events, eventName )){
@@ -39,6 +49,8 @@
   		}
   		throw 'Module ' + inst.name + ' cannot emit event ' + eventName + '.';
   	};
+
+    inst.initialize.call(built);
   	return built;
   };
 
@@ -83,15 +95,15 @@
   		handlers: _.omit(left.handlers, events )
   	});
   	module.build = function( context ) {
-		var clonedCtx = _.clone( context ),
-            lBuilt = left.build( clonedCtx );
-        clonedCtx.listenTo(_.pick(lBuilt, events) );
-        return _.omit(lBuilt, events);
-  	};
-  	return module;
+      var clonedCtx = _.clone( context ),
+      lBuilt = left.build( clonedCtx );
+      clonedCtx.listenTo(_.pick(lBuilt, events) );
+      return _.omit(lBuilt, events);
+    };
+    return module;
   };
 
-  var wrap = functon(left, attributes ){
+  var wrap = function(left, attributes ){
   	var module = {
   		events:{}, handlers:{}
   	};
@@ -106,128 +118,140 @@
   			}
   		});
   	});
-	return new Module( _.uniqueId('c'), module);
-  	
-  };
+   return new Module( _.uniqueId('c'), module);
 
-  var isEqualSet = function( firstSet, secondSet ){
-	return _.difference( firstSet, secondSet ).length == 0 &&
-				_.difference( secondSet, firstSet ).length == 0 
-  };
+ };
 
-  var Cat = root.Cat = {
-	VERSION: '0.1.0',
+ var isEqualSet = function( firstSet, secondSet ){
+   return _.difference( firstSet, secondSet ).length == 0 &&
+   _.difference( secondSet, firstSet ).length == 0 
+ };
 
-	define: function( name, parents, attributes ){
-		var module = {
-			events:{}, handlers:{}
-		};
-		if ( ! modules[name] ){
-			_.each( parents, function(name){
-				var parent = resolve(name);
-				_.each(['events', 'handlers'], function(attr){
-					_.extend( module[ attr ], parent[ attr ] );
-				});
-			});
-			_.each(['events', 'handlers'], function(attr){
-				_.extend( module[ attr ], attributes[ attr ] );
-			});
-			modules[ name ] = new Module(name, module);
-			return modules[name];
-		} 
-		throw 'Module name ' + name + ' already used.';
-	},
-	inst: function( name ){
-		return modules[ name ];
-	},
-	seq: function(){
-		var left = resolve( arguments[0] );
-		_.each( _.rest(arguments), function(m){
-			var right = resolve(m);
-			if ( isEqualSet( _.keys(left.events), _.keys(right.handlers) ) ){
-				left = seq(left, right);
-			} else {
-				throw 'Incompatible module types.';
-			}
-			
-		});
-		return left;
-	},
-	dot: function(){
-		var left = resolve( arguments[0] );
-		_.each( _.rest(arguments), function(m){
-			var right = resolve(m);
-			left = dot(left, right);
-		});
-		return left;		
-	},
-	trace: function( m, events ){
-		var left = resolve(m);
-		if ( _.difference( events, _.keys(left.events) ).length !== 0 )
-			throw "Cannot trace events not emitted by this module.";
-		if ( _.difference( events, _.keys(left.handlers) ).length !== 0 )
-			throw "Cannot feedback some events: no handler.";
-		return trace( left, events );
-	},
-	wrap: function( m, attributes ){
-		var left = resolve(m);
-		return wrap(left, attributes);
-	}
-  };
-  
-  var Module = Cat.Module = function(name, attributes) {
-  	var self = this;
-    this.name = name;
-    this.events = attributes.events || {};
-    this.handlers = attributes.handlers || {};
-    this.build = function(context){
-    	return build( self, context );
-    };
-  };
+ var Cat = root.Cat = {
+   VERSION: '0.1.0',
+
+   define: function( name, parents, attributes ){
+    var module = {
+     events:{}, handlers:{}
+   };
+   if ( ! modules[name] ){
+     _.each( parents, function(name){
+      var parent = resolve(name);
+      _.each(['events', 'handlers'], function(attr){
+       _.extend( module[ attr ], parent[ attr ] );
+     });
+     _.extend( module, _.omit(parent, ['events', 'handlers', 'name']))
+    });
+     _.each(['events', 'handlers'], function(attr){
+      _.extend( module[ attr ], attributes[ attr ] );
+    });
+     _.extend( module, _.omit(attributes, ['events', 'handlers']))
+     modules[ name ] = new Module(name, module);
+     return modules[name];
+   } 
+   throw 'Module name ' + name + ' already used.';
+ },
+ inst: function( name, options ){
+  var inst = modules[ name ];
+  inst.options = options;
+  return inst;
+},
+seq: function(){
+  var left = resolve( arguments[0] );
+  _.each( _.rest(arguments), function(m){
+   var right = resolve(m);
+   if ( isEqualSet( _.keys(left.events), _.keys(right.handlers) ) ){
+    left = seq(left, right);
+  } else {
+    throw 'Incompatible module types.';
+  }
+
+});
+  return left;
+},
+dot: function(){
+  var left = resolve( arguments[0] );
+  _.each( _.rest(arguments), function(m){
+   var right = resolve(m);
+   left = dot(left, right);
+ });
+  return left;		
+},
+trace: function( m, events ){
+  var left = resolve(m);
+  if ( _.difference( events, _.keys(left.events) ).length !== 0 )
+   throw "Cannot trace events not emitted by this module.";
+ if ( _.difference( events, _.keys(left.handlers) ).length !== 0 )
+   throw "Cannot feedback some events: no handler.";
+ return trace( left, events );
+},
+wrap: function( m, attributes ){
+  var left = resolve(m);
+  return wrap(left, attributes);
+}
+};
+
+var Module = Cat.Module = function(name, attributes) {
+
+ var self = this;
+ this.name = name;
+ this.events = attributes.events || {};
+ this.handlers = attributes.handlers || {};
+ _.extend( this, _.omit(attributes, ['events', 'handlers']));
+
+ this.build = function(context){
+   return build( self, context );
+ };
+};
 
 
 
-  _.extend(Module.prototype, {
+_.extend(Module.prototype, {
 
-	  start: function(){
-	  	return this.build( new Context );
-	  },
-	 
-	  trace: function( events ){
-		 return Cat.trace(this, events);
-	  },
-	 
-	  dot: function( module ){
-		 return Cat.dot(this, module);
-	  },
-	
-	  seq: function( module ){
-		 return Cat.seq(this, module);
-	  },
-	
-	  wrap: function( options ){
-	  	return Cat.wrap(this, options);
-	  }
-	
-  });
 
-	var Context = function( eventMap ){
-        this.eventMap = eventMap || {};
-    };
+initialize: function(){
 
-   _.extend(Context.prototype, {
-   		trigger: function(event){
-   			var params = _.rest(arguments);
-   			if ( _.has( this.eventMap, event ) ){
-   				this.eventMap[ event ].apply(null, params);
-   			}
-   		},
-   		listenTo: function(eventMap){
-   			_.extend( this.eventMap, eventMap );
-   		}
-   });
+},
 
-  var Event = Cat.Event = function( context, name ){
+start: function(){
+  return this.build( new Context );
+},
+
+trace: function( events ){
+ return Cat.trace(this, events);
+},
+
+dot: function( module ){
+ return Cat.dot(this, module);
+},
+
+seq: function( module ){
+ return Cat.seq(this, module);
+},
+
+wrap: function( options ){
+  return Cat.wrap(this, options);
+}
+
+});
+
+var Context = function( eventMap ){
+  this.eventMap = eventMap || {};
+};
+
+_.extend(Context.prototype, {
+ trigger: function(event){
+  var params = _.rest(arguments);
+  if ( _.has( this.eventMap, event ) ){
+   this.eventMap[ event ].apply(null, params);
+ }
+},
+listenTo: function(eventMap){
+  _.extend( this.eventMap, eventMap );
+}
+});
+
+var Event = Cat.Event = function( context, name ){
 	
 	this.propagate = function(){
 		context.trigger(name);
@@ -235,7 +259,7 @@
 	this.stop = function(){
 		// do nothing
 	};
-  };
+};
 
 
 })(this, _);
